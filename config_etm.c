@@ -15,13 +15,22 @@ Present only when FEAT_ETE is implemented and System register access to the trac
 name                [op0 op1 CRn CRm op2](S<op0>_<op1>_<Cn>_<Cm>_<op2>)     discription     
 ======================================================================================================================================================
 CPACR_EL1           [0b11 0b000 0b0001 0b0000 0b010](S3_0_C1_C0_2)          Architectural Feature Access Control Register
+TRCSTATR            [0b10 0b001 0b0000 0b0011 0b000](S2_1_C0_C3_0)          Trace Status Register
 TRCPRGCTLR          [0b10 0b001 0b0000 0b0001 0b000](S2_1_C0_C1_0)          Trace Programming Control Register
 TRCVICTLR           [0b10 0b001 0b0000 0b0000 0b010](S2_1_C0_C0_2)          Trace ViewInst Main Control Register
 TRCEXTINSELR<0>     [0b10 0b001 0b0000 0b1000 0b100](S2_1_C0_C8_4)          Trace External Input Select Register <n>, 
 TRCRSCTLR<2>        [0b10 0b001 0b0001 0b0010 0b000](S2_1_C1_C2_0)          Trace Resource Selection Control Register<n>, n = 2 - 31. 
 TRCEVENTCTL0R       [0b10 0b001 0b0000 0b1000 0b000](S2_1_C0_C8_0)          Trace Event Control 0 Register
-TRCIDR4             [0b10 0b001 0b0000 0b1100 0b111](S2_1_C0_C12_8)         Trace ID Register 4(RO)
+TRCIDR4             [0b10 0b001 0b0000 0b1100 0b111](S2_1_C0_C12_7)         Trace ID Register 4(RO)
 TRCEVENTCTL1R       [0b10 0b001 0b0000 0b1001 0b000](S2_1_C0_C9_0)          Trace Event Control 1 Register, Controls behavior of TRCEVENTCTL0R.
+*/
+
+
+
+/*
+name                [Component Offset]                       discription                              
+=========================================================================================================
+TRCPDSR             [ETE 0x314]                              Trace PowerDown Status Register 
 */
 
 
@@ -36,7 +45,7 @@ static void enable_EL1_access_ETM(void) {
     uint64_t val;
     asm volatile(
         "mrs %0, S3_0_C1_C0_2 \n"  
-        "orr %0, %0, #(1<<27)\n"      
+        "orr %0, %0, #(1<<28)\n"      
         "msr S3_0_C1_C0_2, %0\n"  
         : "=r" (val)            
         :
@@ -46,6 +55,7 @@ static void enable_EL1_access_ETM(void) {
 }
 
 
+
 /*
 TRCPRGCTLR.EN, bit [0]
     0b0     The trace unit is disabled.
@@ -53,18 +63,40 @@ TRCPRGCTLR.EN, bit [0]
 
 Work at  EL1 && CPACR_EL1.TTA 
 */
-static void enable_ETM(void){
-    uint64_t val;
+static void enable_ETM(uint32_t en){
+    uint64_t result;
     asm volatile(
-        "mrs %0, S2_1_C0_C1_0\n"  
-        "orr %0, %0, #1\n"      
-        "msr S2_1_C0_C1_0, %0\n"  
-        : "=r" (val)            
-        :
-        : "memory"             
+        "mrs %[result], S2_1_C0_C1_0\n"  
+        "orr %[result], %[result], %[en]\n"      
+        "msr S2_1_C0_C1_0, %[result]\n"  
+        : [result] "=r" (result)         
+        : [en]    "r" (en) 
+        : "memory"               
     );
-    printk(KERN_INFO "Set TRCPRGCTLR[EN = 1], TRCPRGCTLR = %llx!\n",val);
+    printk(KERN_INFO "Set TRCPRGCTLR[EN = %d], TRCPRGCTLR = %llx!\n",en,result);
 }
+
+
+/*
+TRCSTATR.IDLE, bit [0]
+    0b0     The trace unit is not idle.
+    0b1     The trace unit is idle.
+
+Work at  EL1 && CPACR_EL1.TTA     
+*/
+static void check_trace_idle(void){
+    uint64_t result;
+    asm volatile( 
+        "msr S2_1_C0_C3_0, %[result]\n"  
+        : [result] "=r" (result)         
+        :  
+        :               
+    );
+    printk(KERN_INFO "TRCPRGCTLR = %llx!\n",result);
+}
+
+
+
 
 
 
@@ -152,7 +184,7 @@ Read Only
 static void check_selector_pairs(void){
     uint64_t result;
     asm volatile(
-        "mrs %[result], S2_1_C0_C12_8\n"  
+        "mrs %[result], S2_1_C0_C12_7\n"  
         : [result] "=r" (result)    
         :             
         : "memory" 
@@ -204,9 +236,25 @@ static void enable_trace_event0(void) {
 }
 
 
+
+
+
+
 static int __init etm_config_init(void) {
     printk(KERN_INFO "Configure ETM begin!\n");
+    //enable_EL1_access_ETM();
+    enable_ETM(0);
+    check_trace_idle();
+    
+    enable_trace_EL0();
+    trigger_PMU_event();
+    load_as_resource2();
+    //check_selector_pairs();
+    select_trace_event0();
+    enable_trace_event0();
+    enable_ETM(1);
 
+    check_trace_idle();
     return 0;
 }
 
