@@ -1,6 +1,6 @@
 make
-insmod config_etm.ko 
-dmesg
+sudo insmod config_etm.ko 
+sudo dmesg
 
 cd force_rmmod
 make
