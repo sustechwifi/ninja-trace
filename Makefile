@@ -1,7 +1,3 @@
-if [ "$karch" = "arm" ] && [ -f "arch/arm/kernel/module.lds" ]; then
-    copy_mkdir "$target_dir" "./arch/arm/kernel/module.lds"
-fi
-
 obj-m += config_etm.o
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
