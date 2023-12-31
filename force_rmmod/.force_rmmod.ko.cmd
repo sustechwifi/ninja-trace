@@ -1,0 +1,1 @@
+cmd_/home/debian/ninja-trace/force_rmmod/force_rmmod.ko := ld -r -EL -z noexecstack --build-id  -T ./scripts/module-common.lds -T ./arch/arm/kernel/module.lds -o /home/debian/ninja-trace/force_rmmod/force_rmmod.ko /home/debian/ninja-trace/force_rmmod/force_rmmod.o /home/debian/ninja-trace/force_rmmod/force_rmmod.mod.o;  true
