@@ -9,6 +9,8 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("JunTao You");
 MODULE_DESCRIPTION("Confiure ETM registers in syscall tracing");
 
+// PMU event EXC_SVC number
+#define EXC_SVC                 (0x82)
 
 /*
 Present only when FEAT_ETE is implemented and System register access to the trace unit registers is implemented
@@ -119,9 +121,33 @@ Work at TRCEVENTCTL0R.EVENT0.TYPE == 0 and TRCEVENTCTL0R.EVENT0.SEL == n.
 #define SELECT_EXTINm(m)          (1 << m)
 
 
+
 struct config_etm_pram {
     void __iomem *etm_register;
 } t_param;
+
+static void select_EXC_SVC(uint32_t id){
+    uint32_t EVTSEL;
+    asm volatile( "mrc p15, 0, %0, c9, c13, 1" : "=r" (EVTSEL)); // ; Read EVTSEL Register
+    printk(KERN_INFO "Read EVTSEL = 0x%x,\n",EVTSEL);
+    uint32_t SEL = (0xff);
+    EVTSEL = (EVTSEL & (~SEL)) | id;
+    asm volatile( "mcr p15, 0, %0, c9, c13, 1" : : "r" (EVTSEL)); // ; Write EVTSEL Register
+    printk(KERN_INFO "Write EVTSEL = 0x%x,\n",EVTSEL);
+}
+
+static uint32_t get_ROM_table(void){
+    uint32_t DBGROMADDR;
+    asm volatile( "mrc p14, 0, %0, c1, c0, 0" : "=r" (DBGROMADDR));
+    uint32_t DBGSELFADDR;
+    asm volatile( "mrc p14, 0, %0, c2, c0, 0" : "=r" (DBGSELFADDR));
+    uint32_t PA = (0xfffff << 12);
+    uint DEBUG_UNIT_BASE_ADDR = (DBGROMADDR & PA) | ((DBGSELFADDR & PA)>>12);
+    printk(KERN_INFO "DBGROMADDR = 0x%x, DBGSELFADDR= 0x%x,\n",DBGROMADDR,DBGSELFADDR);
+    printk(KERN_INFO "DEBUG_UNIT_BASE_ADDR = 0x%x,\n",DEBUG_UNIT_BASE_ADDR);
+    return DEBUG_UNIT_BASE_ADDR;
+}
+
 
 
 static void enable_ETM(struct config_etm_pram *param, uint32_t en){
@@ -187,7 +213,7 @@ static void enable_trace_event0(struct config_etm_pram *param) {
 static int do_config(struct config_etm_pram *param){
     enable_ETM(param,0);
     enable_trace_EL0(param);
-    trigger_PMU_event(param,0x60);
+    trigger_PMU_event(param,EXC_SVC);
     load_as_resource2(param);
     select_trace_event0(param);
     enable_trace_event0(param);
@@ -198,6 +224,8 @@ static int do_config(struct config_etm_pram *param){
 
 static int __init etm_config_init(void) {
     printk(KERN_INFO "Configure ETM begin!\n");
+    select_EXC_SVC(EXC_SVC);
+    uint32_t base_addr = get_ROM_table();
     struct config_etm_pram *param = kmalloc(sizeof(t_param), GFP_KERNEL);
     param->etm_register = ioremap(ETM_BASE_ADDRESS, ETM_REGISTER_RANGE);
     do_config(param);
